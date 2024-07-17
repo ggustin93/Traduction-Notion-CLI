@@ -75,13 +75,6 @@ async def get_pages_to_translate(database_id):
         logger.error(f"Erreur lors de la récupération des pages à traduire : {str(e)}")
         raise
 
-async def get_title_property_name(page):
-    """Détermine le nom de la propriété utilisée pour le titre de la page."""
-    for prop_name, prop_value in page['properties'].items():
-        if prop_value['type'] == 'title':
-            return prop_name
-    return None
-
 async def translate_text(text, from_lang, to_lang):
     """Traduit un texte en utilisant l'API DeepL de manière asynchrone."""
     try:
@@ -95,9 +88,25 @@ async def translate_text(text, from_lang, to_lang):
         logger.error(f"Erreur lors de la traduction du texte : {str(e)}")
         raise
 
+async def translate_block(block, from_lang, to_lang):
+    """Traduit un bloc Notion."""
+    try:
+        if block['type'] in ['paragraph', 'heading_1', 'heading_2', 'heading_3', 'bulleted_list_item', 'numbered_list_item', 'to_do', 'toggle', 'quote', 'callout']:
+            text_elements = block[block['type']]['rich_text']
+            for text_element in text_elements:
+                if text_element['type'] == 'text':
+                    original_text = text_element['text']['content']
+                    translated_text = await translate_text(original_text, from_lang, to_lang)
+                    text_element['text']['content'] = translated_text
+        return block
+    except Exception as e:
+        logger.error(f"Erreur lors de la traduction du bloc {block['id']}: {str(e)}")
+        raise
+
 async def translate_page(page_id, from_lang, to_lang):
     """Traduit directement une page Notion."""
     try:
+        # Traduire les propriétés de la page
         page = await notion.pages.retrieve(page_id=page_id)
         updated_properties = {}
         for prop_name, prop_value in page['properties'].items():
@@ -114,7 +123,7 @@ async def translate_page(page_id, from_lang, to_lang):
                     }
             elif prop_value['type'] == 'rich_text':
                 if prop_value['rich_text']:
-                    original_text = prop_value['rich_text'][0]['plain_text']
+                    original_text = ''.join([text['plain_text'] for text in prop_value['rich_text']])
                     translated_text = await translate_text(original_text, from_lang, to_lang)
                     updated_properties[prop_name] = {
                         'rich_text': [{
@@ -127,9 +136,15 @@ async def translate_page(page_id, from_lang, to_lang):
 
         if updated_properties:
             await notion.pages.update(page_id=page_id, properties=updated_properties)
-            logger.info(f"Page traduite avec succès: {page_id}")
+            logger.info(f"Propriétés de la page traduites avec succès: {page_id}")
         else:
             logger.warning(f"Aucune propriété modifiable trouvée pour la page {page_id}.")
+
+        # Traduire les blocs de la page
+        blocks = await notion.blocks.children.list(block_id=page_id)
+        for block in blocks['results']:
+            translated_block = await translate_block(block, from_lang, to_lang)
+            await notion.blocks.update(block_id=block['id'], **translated_block)
 
         # Ajouter une propriété pour indiquer la langue de la page
         await notion.pages.update(
