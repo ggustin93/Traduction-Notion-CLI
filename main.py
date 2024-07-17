@@ -98,7 +98,10 @@ async def translate_block(block, from_lang, to_lang):
                     original_text = text_element['text']['content']
                     translated_text = await translate_text(original_text, from_lang, to_lang)
                     text_element['text']['content'] = translated_text
-        return block
+            return block
+        else:
+            # Ignorer les blocs non textuels
+            return None
     except Exception as e:
         logger.error(f"Erreur lors de la traduction du bloc {block['id']}: {str(e)}")
         raise
@@ -144,7 +147,8 @@ async def translate_page(page_id, from_lang, to_lang):
         blocks = await notion.blocks.children.list(block_id=page_id)
         for block in blocks['results']:
             translated_block = await translate_block(block, from_lang, to_lang)
-            await notion.blocks.update(block_id=block['id'], **translated_block)
+            if translated_block:
+                await notion.blocks.update(block_id=block['id'], **translated_block)
 
         # Ajouter une propriété pour indiquer la langue de la page
         await notion.pages.update(
