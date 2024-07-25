@@ -91,13 +91,13 @@ async def get_all_pages(database_id):
 
 
 async def get_pages_to_translate(database_id):
-    """Obtient toutes les pages avec le statut 'A traduire' d'une base de données."""
+    """Obtient toutes les pages avec le statut 'A traduire (vers NL)' d'une base de données."""
     try:
         all_pages = await get_all_pages(database_id)
         pages_to_translate = [
             page
             for page in all_pages if page['properties'].get('Statut', {}).get(
-                'status', {}).get('name') == 'A traduire'
+                'status', {}).get('name') == 'A traduire (vers NL)'
         ]
         logger.info(
             f"Nombre de pages à traduire trouvées : {len(pages_to_translate)}")
